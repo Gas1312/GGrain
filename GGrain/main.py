@@ -174,10 +174,14 @@ class GGrainApp:
         self.running = True
         self._a_used_as_mod = False
         self._stick_audition_timer = 0.0
+        self._pending_audition = None
+        self._pending_audition_timer = 0.0
 
-    def _audition_if_stopped(self):
+    def _audition_if_stopped(self, midi_note=None, inst_idx=None):
         if not self.state.playing:
-            self.audio.audition_instrument(self.state.active_inst)
+            target = self.state.active_inst if inst_idx is None else inst_idx
+            self._pending_audition = (target, midi_note)
+            self._pending_audition_timer = 0.10
 
     # ==========================================================================
     # R36S DIRECT BOOT HELPER (/userdata/system/custom.sh)
@@ -773,8 +777,7 @@ class GGrainApp:
                     else:
                         st.inst = (st.inst + 1) % 8
                         self.state.active_inst = st.inst
-                    if not self.state.playing:
-                        self.audio.audition_instrument(st.inst, midi_note=st.note)
+                    self._audition_if_stopped(midi_note=st.note, inst_idx=st.inst)
                     self._a_used_as_mod = True
                 elif self.inp.pressed("LEFT"):
                     st.active = True
@@ -789,8 +792,7 @@ class GGrainApp:
                     else:
                         st.inst = (st.inst - 1) % 8
                         self.state.active_inst = st.inst
-                    if not self.state.playing:
-                        self.audio.audition_instrument(st.inst, midi_note=st.note)
+                    self._audition_if_stopped(midi_note=st.note)
                     self._a_used_as_mod = True
             else:
                 if self.inp.pressed("UP"):
@@ -1077,6 +1079,13 @@ class GGrainApp:
 
             if self.state.toast_timer > 0.0:
                 self.state.toast_timer = max(0.0, self.state.toast_timer - dt)
+
+            if self._pending_audition is not None:
+                self._pending_audition_timer -= dt
+                if self._pending_audition_timer <= 0.0:
+                    p_inst, p_note = self._pending_audition
+                    self._pending_audition = None
+                    self.audio.audition_instrument(p_inst, midi_note=p_note)
 
             events = pygame.event.get()
             for ev in events:

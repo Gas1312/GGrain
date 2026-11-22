@@ -13,6 +13,12 @@ try:
 except ImportError:
     HAS_NUMPY = False
 
+try:
+    import audioop
+    HAS_AUDIOOP = True
+except ImportError:
+    HAS_AUDIOOP = False
+
 SAMPLE_RATE = 22050
 
 
@@ -118,22 +124,23 @@ def load_wav_ableton_safe(filepath):
 
 def detect_root_note(samples, sr=SAMPLE_RATE):
     """Autocorrelazione rapida per stimare la nota fondamentale MIDI del campione."""
-    if len(samples) < 2048:
+    if len(samples) < 1024:
         return 60
-    start = min(len(samples) // 6, 4096)
-    win = samples[start:start + 2048]
-    energy = sum(x * x for x in win)
-    if energy < 1e-4:
+    start = min(len(samples) // 6, 2048)
+    win = samples[start:start + 1024]
+    energy = sum(x * x for x in win[::4])
+    if energy < 5e-5:
         return 60
 
     min_lag = int(sr / 880.0)
     max_lag = int(sr / 55.0)
     best_lag = 0
     best_corr = -1.0
+    w_len = len(win)
 
-    for lag in range(min_lag, min(max_lag, len(win) // 2)):
+    for lag in range(min_lag, min(max_lag, w_len // 2)):
         corr = 0.0
-        for i in range(0, len(win) - lag, 2):
+        for i in range(0, w_len - lag, 4):
             corr += win[i] * win[i + lag]
         if corr > best_corr:
             best_corr = corr
@@ -341,56 +348,73 @@ class PreRenderedInstrument:
             s_int = np.clip(samples * 32767.0, -32767.0, 32767.0).astype(np.int16)
             return pygame.mixer.Sound(buffer=np.repeat(s_int, 2).tobytes())
 
+        mono_buf = array.array("h", bytes(out_len * 2))
+        flt_mode = -1 if cutoff < -0.02 else (1 if cutoff > 0.02 else 0)
+        use_lfo = lfo_depth > 0.01
+        lfo_step = (2.0 * math.pi * lfo_freq) / SAMPLE_RATE
+        vol_32k = vol * 32767.0
+        use_drive = tape_drive > 0.02
+        inv_tanh_drive = (1.0 / tanh_drive) if use_drive else 1.0
+
+        is_grain = (inst_data.mode == "GRAIN")
+        grain_span = max(64, int(SAMPLE_RATE * (0.02 + inst_data.grain_size * 0.25))) if is_grain else 1
+        grain_step = (2.0 * math.pi) / max(1, out_len - 1)
+        fade_out_start = out_len - 128
+        base_pos = float(start_idx + spray_jitter)
+        max_idx = total_src - 2
+
         sin_fn = math.sin
         cos_fn = math.cos
         tanh_fn = math.tanh
-        pi2 = 2.0 * math.pi
-        is_grain = (inst_data.mode == "GRAIN")
-        grain_span = max(64, int(SAMPLE_RATE * (0.02 + inst_data.grain_size * 0.25))) if is_grain else 1
-        inv_out = 1.0 / max(1, out_len - 1)
 
         for i in range(out_len):
-            t = i / SAMPLE_RATE
-            env = 1.0
-            if i < 64:
-                env = i / 64.0
-            elif i > out_len - 256:
-                env = max(0.0, (out_len - i) / 256.0)
+            if i < 32:
+                env = i * 0.03125
+            elif i > fade_out_start:
+                env = (out_len - i) * 0.0078125
+            else:
+                env = 1.0
 
-            if inst_data.mode == "GRAIN":
-                env *= 0.5 * (1.0 - math.cos(2.0 * math.pi * i / max(1, out_len - 1)))
-
-            lfo_val = math.sin(2.0 * math.pi * lfo_freq * t) * lfo_depth if lfo_depth > 0.01 else 0.0
-            pos_f = start_idx + spray_jitter + (i * rate_ratio * (1.0 + lfo_val * 0.06))
-
-            if inst_data.mode == "GRAIN":
-                grain_span = max(64, int(SAMPLE_RATE * (0.02 + inst_data.grain_size * 0.25)))
-                pos_f = start_idx + spray_jitter + ((i * rate_ratio) % grain_span)
+            if is_grain:
+                env *= 0.5 * (1.0 - cos_fn(grain_step * i))
+                pos_f = base_pos + ((i * rate_ratio) % grain_span)
+            elif use_lfo:
+                pos_f = base_pos + (i * rate_ratio * (1.0 + sin_fn(lfo_step * i) * lfo_depth * 0.06))
+            else:
+                pos_f = base_pos + i * rate_ratio
 
             idx0 = int(pos_f)
-            if idx0 < 0 or idx0 >= total_src - 1:
+            if idx0 < 0 or idx0 > max_idx:
                 sample = 0.0
             else:
                 frac = pos_f - idx0
-                sample = src[idx0] * (1.0 - frac) + src[idx0 + 1] * frac
+                sample = src[idx0] + (src[idx0 + 1] - src[idx0]) * frac
 
-            if cutoff < -0.02:
+            if flt_mode == -1:
                 lp_state += alpha_lp * (sample * res_boost - lp_state)
                 sample = lp_state
-            elif cutoff > 0.02:
+            elif flt_mode == 1:
                 hp_state = alpha_hp * (hp_state + sample * res_boost - prev_in)
                 prev_in = sample
                 sample = hp_state
 
-            sample *= vol * env
-            if tape_drive > 0.02:
-                sample = math.tanh(sample * drive) / math.tanh(drive)
+            if use_drive:
+                sample = tanh_fn(sample * env * drive) * inv_tanh_drive * vol_32k
+            else:
+                sample = sample * env * vol_32k
 
-            s_int = int(max(-32767, min(32767, sample * 32767.0)))
-            buf.append(s_int)
-            buf.append(s_int)
+            mono_buf[i] = 32767 if sample > 32767.0 else (-32767 if sample < -32767.0 else int(sample))
 
-        return pygame.mixer.Sound(buffer=buf.tobytes())
+        raw_mono = mono_buf.tobytes()
+        if HAS_AUDIOOP:
+            stereo_bytes = audioop.tostereo(raw_mono, 2, 1.0, 1.0)
+        else:
+            stereo_buf = array.array("h", bytes(out_len * 4))
+            stereo_buf[0::2] = mono_buf
+            stereo_buf[1::2] = mono_buf
+            stereo_bytes = stereo_buf.tobytes()
+
+        return pygame.mixer.Sound(buffer=stereo_bytes)
 
 
 # ==============================================================================
