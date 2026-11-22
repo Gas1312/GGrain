@@ -491,26 +491,26 @@ class AudioEngine:
 
         if self.state.sync_out_2ppqn:
             ch = pygame.mixer.Channel(track_idx * 4)
-            ch.set_volume(final_vol, 0.0)
             ch.play(snd)
+            ch.set_volume(final_vol, 0.0)
             self.state.vu_left = min(1.0, max(self.state.vu_left, final_vol))
             return
 
         ch_main = pygame.mixer.Channel(track_idx * 4)
-        ch_main.set_volume(final_vol, final_vol)
         ch_main.play(snd)
+        ch_main.set_volume(final_vol, final_vol)
 
         if not mfx.bypass:
             if mfx.chorus_mix > 0.05:
                 ch_chorus = pygame.mixer.Channel(track_idx * 4 + 1)
                 w = final_vol * mfx.chorus_mix * 0.55
-                ch_chorus.set_volume(w * 0.3, w)
                 ch_chorus.play(snd)
+                ch_chorus.set_volume(w * 0.3, w)
             if mfx.reverb_mix > 0.05:
                 ch_rev = pygame.mixer.Channel(track_idx * 4 + 2)
                 r = final_vol * mfx.reverb_mix * 0.45
-                ch_rev.set_volume(r, r * 0.85)
                 ch_rev.play(snd)
+                ch_rev.set_volume(r, r * 0.85)
 
         self.state.vu_left = min(1.0, max(self.state.vu_left, final_vol))
         self.state.vu_right = min(1.0, max(self.state.vu_right, final_vol * (1.0 + mfx.chorus_mix * 0.15)))
@@ -544,8 +544,8 @@ class AudioEngine:
     def _trigger_current_step(self):
         if self.state.sync_out_2ppqn and (self.state.current_step % 2 == 0):
             ch_sync = pygame.mixer.Channel(31)
-            ch_sync.set_volume(0.0, 1.0)
             ch_sync.play(self.sync_pulse_sound)
+            ch_sync.set_volume(0.0, 1.0)
 
         bar = self.state.current_bar
         step_idx = self.state.current_step
