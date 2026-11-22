@@ -18,7 +18,7 @@ Built using only Python's standard library (`array`, `math`, `struct`) and `pyga
 ### 1. 4-Track Sequencer & 8 Shared Instruments (`2:SONG/SEQ`)
 - **Hybrid M8 + Nanoloop Workflow:** Program 4 tracks (`T1`–`T4`) across an 8-bar Song Chain matrix, editing 16 vertical steps per pattern with real-time visual **Slice Position** and **Level** bars.
 - **8 Shared Instrument Slots (`I01`–`I08`):** Any track can trigger any of the 8 global instruments on any step, allowing drum kits, basslines, and granular textures to interlock seamlessly.
-- **Fast Chip-Tracker Ergonomics:** Instant bar looping (`START`) vs. full song playback (`R1 + START`), 1-click pattern cloning (`X`), Smart Inheritance (remembers last note, slice, and volume), and per-step octave jumps (`A + L1 + Up/Down`).
+- **Fast Chip-Tracker Ergonomics:** Instant bar looping (`START`) vs. full song playback (`R1 + START`), 1-click pattern cloning (`X`), LSDJ-style Smart Inheritance (tapping `A` on an active step auditions and picks its parameters without accidental deletion), and per-step octave jumps (`A + L1 + Up/Down`).
 
 ### 2. Dual-Engine Instrument Studio (`3:INSTRUMENT`)
 - **LSDJ-Style Source Selector:** Switch each slot (`I01`–`I08`) on the fly between external `.wav` samples and built-in C4-calibrated oscillators (`OSC:KICK`, `OSC:SNARE`, `OSC:HAT`, `OSC:SAW`, `OSC:SQR`, `OSC:SUB`).
@@ -66,18 +66,19 @@ Built using only Python's standard library (`array`, `math`, `struct`) and `pyga
 | **Loop Current Bar** (Play / Stop) | `START` | `Enter` |
 | **Play Full Song Chain** (`01–08`) | `R1 + START` | `W + Enter` |
 | **Switch Active Track (`T1–T4`) or Inst (`I01–I08`)** | `L1` / `R1` | `Q` / `W` |
-| **Mute / Unmute Active Track** | `SELECT + B` | `Backspace + X` |
-| **Toggle Step / Confirm / Open Browser** | `A` | `Z` |
+| **Mute / Unmute Active Track** | `L3` (Left Stick Click) or `SELECT + B` | `Backspace + X` |
+| **Audition Active Inst / Synth Lab** | `R3` (Right Stick Click) or `B` | `X` |
+| **Add Step / Pick & Audition / Confirm** | `A` | `Z` |
 | **Edit Step Note** (Scale Quantized) | `A + Up / Down` | `Z + Up / Down` |
 | **Step Pitch ±1 Octave (`±12st`)** | `A + L1 + Up / Down` | `Z + Q + Up / Down` |
 | **Assign Step Instrument (`I01–I08`)** | `A + Left / Right` | `Z + Left / Right` |
 | **Adjust Step Slice Offset / Step Volume** | `A + L1 + L/R` / `A + R1 + L/R` | `Z + Q + L/R` / `Z + W + L/R` |
-| **Clear Step / Close Popup / Audition Sound** | `B` | `X` |
+| **Clear Step / Close Popup** | `B` | `X` |
 | **Context Action** (Clone / MIDI-Rec / Mic / Bounce / Bypass) | `X` | `A` |
 | **Context Workflow Tools Menu** | `Y` | `S` |
 | **Live Filter & Res / Slice Scrub & Pitch Bend** | `Left Stick` / `Right Stick` | — |
 | **Developer Gamepad & Telemetry Tester** | `L2 + R2 + SELECT` | `F12` |
-| **Safe Exit to KNULLI OS** | `SELECT + START` | `Backspace + Enter` |
+| **Safe Exit to KNULLI OS** | `SELECT + START` or `SELECT + FN` | `Backspace + Enter` |
 
 ---
 
