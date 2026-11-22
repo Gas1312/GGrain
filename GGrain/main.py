@@ -5,7 +5,7 @@ import time
 import pygame
 
 from state import (
-    ProjectState, quantize_to_scale, SOURCE_TYPES, SCALE_LIST,
+    ProjectState, quantize_to_scale, step_in_scale, SOURCE_TYPES, SCALE_LIST,
     SYNTH_WAVES, SYNTH_FOLDERS, THEME_BG_CHOICES, THEME_INK_CHOICES, THEME_ACCENT_CHOICES
 )
 from audio_dsp import AudioEngine
@@ -749,7 +749,7 @@ class GGrainApp:
                     if self.inp.is_held("L1"):
                         st.note = min(96, st.note + 12)
                     else:
-                        st.note = quantize_to_scale(st.note + 1, inst_obj.root_note, inst_obj.scale)
+                        st.note = step_in_scale(st.note, 1, inst_obj.root_note, inst_obj.scale)
                     self.state.last_step_note = st.note
                     if not self.state.playing:
                         self.audio.audition_instrument(st.inst, midi_note=st.note)
@@ -759,7 +759,7 @@ class GGrainApp:
                     if self.inp.is_held("L1"):
                         st.note = max(24, st.note - 12)
                     else:
-                        st.note = quantize_to_scale(st.note - 1, inst_obj.root_note, inst_obj.scale)
+                        st.note = step_in_scale(st.note, -1, inst_obj.root_note, inst_obj.scale)
                     self.state.last_step_note = st.note
                     if not self.state.playing:
                         self.audio.audition_instrument(st.inst, midi_note=st.note)
