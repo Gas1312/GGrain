@@ -44,7 +44,7 @@ SHORTCUT_PAGES = [
         ("A + R1 + L/R", "Adjust Step Level / Volume"),
         ("B", "Clear Step / Audition Inst"),
         ("X (ON SONG)", "Clone Pattern to Next Slot"),
-        ("X (ON STEPS)", "Toggle USB-MIDI Step-Record"),
+        ("X / X+U/D (STEPS)", "Select Block -> Copy / Paste"),
         ("L-STICK X/Y", "Live Filter Cutoff & Res"),
         ("R-STICK X/Y", "Live Slice Scrub & Pitch Bend"),
     ]),
@@ -471,11 +471,20 @@ class UIRenderer:
             )
             is_cur_step = (s == self.state.cursor_step)
 
+            is_block_sel = False
+            if self.state.step_sel_active and self.state.seq_focus == "STEPS":
+                lo = min(self.state.step_sel_anchor, self.state.step_sel_end)
+                hi = max(self.state.step_sel_anchor, self.state.step_sel_end)
+                is_block_sel = (lo <= s <= hi)
+
             row_rect = pygame.Rect(234, sy, 392, s_row_h - 2)
-            if is_play_step:
+            if is_block_sel or is_play_step:
                 pygame.draw.rect(self.screen, self.c_red_dim, row_rect, border_radius=2)
             elif s % 4 == 0:
                 pygame.draw.rect(self.screen, self.c_panel, row_rect, border_radius=2)
+
+            if is_block_sel:
+                pygame.draw.line(self.screen, self.c_red, (236, sy + s_row_h - 3), (624, sy + s_row_h - 3), 2)
 
             if is_cur_step and self.state.seq_focus == "STEPS":
                 pygame.draw.rect(self.screen, self.c_red, row_rect, 1, border_radius=2)
@@ -947,6 +956,39 @@ class UIRenderer:
             self.screen.blit(ls, (r.left + 10, r.centery - ls.get_height() // 2))
             iy += 32
 
+    def draw_block_menu_overlay(self):
+        ov = pygame.Surface((self.w, self.h), pygame.SRCALPHA)
+        ov.fill((5, 5, 7, 205))
+        self.screen.blit(ov, (0, 0))
+
+        lo = min(self.state.step_sel_anchor, self.state.step_sel_end)
+        hi = max(self.state.step_sel_anchor, self.state.step_sel_end)
+        sel_cnt = hi - lo + 1
+        clip_cnt = len(self.state.step_clipboard)
+
+        modal = pygame.Rect(170, 155, 300, 168)
+        pygame.draw.rect(self.screen, self.c_surface, modal, border_radius=6)
+        pygame.draw.rect(self.screen, self.c_red, modal, 2, border_radius=6)
+
+        hdr = self.f_md.render(f"BLOCK [STP {lo + 1:02d}..{hi + 1:02d}]", True, self.c_white)
+        self.screen.blit(hdr, (modal.centerx - hdr.get_width() // 2, 168))
+        pygame.draw.line(self.screen, self.c_border, (modal.left + 16, 194), (modal.right - 16, 194), 1)
+
+        opts = [
+            f"1. COPY SELECTION ({sel_cnt} STEP{'S' if sel_cnt > 1 else ''})",
+            f"2. PASTE AT STP {self.state.cursor_step + 1:02d} ({clip_cnt} STEP{'S' if clip_cnt != 1 else ''})" if clip_cnt > 0 else "2. PASTE (CLIPBOARD EMPTY)",
+            "3. CANCEL",
+        ]
+        iy = 204
+        for idx, label in enumerate(opts):
+            is_sel = (idx == self.state.block_menu_idx)
+            r = pygame.Rect(modal.left + 16, iy, modal.width - 32, 28)
+            if is_sel:
+                pygame.draw.rect(self.screen, self.c_red, r, border_radius=3)
+            ls = self.f_xs.render(label, True, self.c_white if is_sel else self.c_muted)
+            self.screen.blit(ls, (r.left + 10, r.centery - ls.get_height() // 2))
+            iy += 34
+
     def draw_toast(self):
         if self.state.toast_timer <= 0.0 or not self.state.toast_msg:
             return
@@ -1114,6 +1156,9 @@ class UIRenderer:
 
         self.draw_toast()
         self.draw_bottom_bar()
+
+        if self.state.block_menu_open:
+            self.draw_block_menu_overlay()
 
         if self.state.y_menu_open:
             self.draw_y_menu_overlay(y_menu_items)

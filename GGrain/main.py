@@ -1,5 +1,6 @@
 import os
 import sys
+import copy
 import time
 import pygame
 
@@ -231,6 +232,7 @@ class GGrainApp:
                 "TRANSPOSE PATTERN +1 OCTAVE",
                 "TRANSPOSE PATTERN -1 OCTAVE",
                 "TOGGLE SOLO TRACK",
+                "TOGGLE USB-MIDI STEP-REC",
             ]
         elif scr == "INSTRUMENT":
             return [
@@ -288,6 +290,9 @@ class GGrainApp:
             elif idx == 5:
                 self.state.toggle_solo()
                 self.state.set_toast(f"SOLO T{self.state.active_track + 1}")
+            elif idx == 6:
+                self.state.midi_step_rec = not self.state.midi_step_rec
+                self.state.set_toast("MIDI STEP-REC: ON" if self.state.midi_step_rec else "MIDI STEP-REC: OFF")
 
         elif scr == "INSTRUMENT":
             inst = self.state.instruments[self.state.active_inst]
@@ -529,6 +534,37 @@ class GGrainApp:
                 self.state.set_toast(f"T{t} MUTED" if self.state.track_muted[t - 1] else f"T{t} UNMUTED")
             return True
 
+        # Gestione Mini-Menu Copia/Incolla Blocco Step (Tasto X)
+        if self.state.block_menu_open:
+            if self.inp.pressed("UP"):
+                self.state.block_menu_idx = (self.state.block_menu_idx - 1) % 3
+            elif self.inp.pressed("DOWN"):
+                self.state.block_menu_idx = (self.state.block_menu_idx + 1) % 3
+            elif self.inp.pressed("A"):
+                pat = self.state.get_current_pattern()
+                if self.state.block_menu_idx == 0:
+                    lo = min(self.state.step_sel_anchor, self.state.step_sel_end)
+                    hi = max(self.state.step_sel_anchor, self.state.step_sel_end)
+                    self.state.step_clipboard = [copy.deepcopy(pat[i]) for i in range(lo, hi + 1)]
+                    self.state.set_toast(f"COPIED {len(self.state.step_clipboard)} STEP(S)")
+                elif self.state.block_menu_idx == 1:
+                    if not self.state.step_clipboard:
+                        self.state.set_toast("CLIPBOARD EMPTY")
+                    else:
+                        start_s = self.state.cursor_step
+                        pasted = 0
+                        for off, clip_st in enumerate(self.state.step_clipboard):
+                            if start_s + off < 16:
+                                pat[start_s + off] = copy.deepcopy(clip_st)
+                                pasted += 1
+                        self.state.set_toast(f"PASTED {pasted} STEP(S)")
+                self.state.block_menu_open = False
+                self.state.step_sel_active = False
+            elif self.inp.pressed("B") or self.inp.pressed("X"):
+                self.state.block_menu_open = False
+                self.state.step_sel_active = False
+            return True
+
         # Gestione Menu Contestuale Y
         if self.state.y_menu_open:
             items = self.get_y_menu_items()
@@ -726,12 +762,14 @@ class GGrainApp:
                     self._a_used_as_mod = True
                 elif self.inp.pressed("RIGHT"):
                     st.active = True
-                    if self.inp.is_held("L1"):
+                    if self.inp.is_held("L1") or self.inp.is_held("L2"):
                         st.slice_pos = min(0.9375, st.slice_pos + 0.0625)
                         self.state.last_step_slice = st.slice_pos
-                    elif self.inp.is_held("R1"):
+                        self.state.set_toast(f"SLICE POS: {int(round(st.slice_pos * 100))}%", duration=1.4)
+                    elif self.inp.is_held("R1") or self.inp.is_held("R2"):
                         st.vol = min(1.0, round(st.vol + 0.1, 2))
                         self.state.last_step_vol = st.vol
+                        self.state.set_toast(f"STEP LEVEL: {int(round(st.vol * 100))}%", duration=1.4)
                     else:
                         st.inst = (st.inst + 1) % 8
                         self.state.active_inst = st.inst
@@ -740,12 +778,14 @@ class GGrainApp:
                     self._a_used_as_mod = True
                 elif self.inp.pressed("LEFT"):
                     st.active = True
-                    if self.inp.is_held("L1"):
+                    if self.inp.is_held("L1") or self.inp.is_held("L2"):
                         st.slice_pos = max(0.0, st.slice_pos - 0.0625)
                         self.state.last_step_slice = st.slice_pos
-                    elif self.inp.is_held("R1"):
+                        self.state.set_toast(f"SLICE POS: {int(round(st.slice_pos * 100))}%", duration=1.4)
+                    elif self.inp.is_held("R1") or self.inp.is_held("R2"):
                         st.vol = max(0.1, round(st.vol - 0.1, 2))
                         self.state.last_step_vol = st.vol
+                        self.state.set_toast(f"STEP LEVEL: {int(round(st.vol * 100))}%", duration=1.4)
                     else:
                         st.inst = (st.inst - 1) % 8
                         self.state.active_inst = st.inst
@@ -780,13 +820,23 @@ class GGrainApp:
                 self._a_used_as_mod = False
 
             if self.inp.pressed("B"):
-                if st.active:
+                if self.state.step_sel_active:
+                    self.state.step_sel_active = False
+                elif st.active:
                     st.active = False
                 else:
                     self.audio.audition_instrument(self.state.active_inst)
 
             if self.inp.pressed("X"):
-                self.state.midi_step_rec = not self.state.midi_step_rec
+                self.state.step_sel_active = True
+                self.state.step_sel_anchor = self.state.cursor_step
+                self.state.step_sel_end = self.state.cursor_step
+            elif self.inp.is_held("X") and self.state.step_sel_active:
+                self.state.step_sel_end = self.state.cursor_step
+            elif self.inp.released("X") and self.state.step_sel_active:
+                dragged = (self.state.step_sel_anchor != self.state.step_sel_end)
+                self.state.block_menu_open = True
+                self.state.block_menu_idx = 0 if (dragged or not self.state.step_clipboard) else 1
 
     def _handle_synth_lab_controls(self, dt):
         sl = self.state.synth_lab
@@ -1057,7 +1107,7 @@ class GGrainApp:
             self.ui.render(self.inp, fps, self.get_y_menu_items(), self.is_direct_boot_enabled())
 
             pygame.display.flip()
-            self.clock.tick(60)
+            self.clock.tick(30)
 
         self.hw.shutdown()
         pygame.quit()

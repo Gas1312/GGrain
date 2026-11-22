@@ -343,6 +343,14 @@ class ProjectState:
         self.synth_param_idx = 0     # 0..7 nella stanza SYNTH_LAB
         self.synth_lab = SynthLabState()
 
+        # Selezione Blocco Step (Copia/Incolla stile LSDJ con X)
+        self.step_sel_active = False
+        self.step_sel_anchor = 0
+        self.step_sel_end = 0
+        self.step_clipboard = []
+        self.block_menu_open = False
+        self.block_menu_idx = 0
+
         # Menu Rapido Contestuale (Tasto Y) & Notifiche Toast
         self.y_menu_open = False
         self.y_menu_idx = 0

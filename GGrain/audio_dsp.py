@@ -13,7 +13,7 @@ try:
 except ImportError:
     HAS_NUMPY = False
 
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 22050
 
 
 # ==============================================================================
@@ -297,6 +297,57 @@ class PreRenderedInstrument:
 
         vol = inst_data.volume
         drive = 1.0 + tape_drive * 3.5
+        tanh_drive = math.tanh(drive) if tape_drive > 0.02 else 1.0
+
+        if HAS_NUMPY:
+            src_arr = np.asarray(src, dtype=np.float32)
+            idx_ar = np.arange(out_len, dtype=np.float32)
+            env = np.ones(out_len, dtype=np.float32)
+            fi = min(64, out_len)
+            if fi > 0:
+                env[:fi] = np.arange(fi, dtype=np.float32) / 64.0
+            if out_len > 256:
+                env[out_len - 256:] = np.maximum(0.0, (out_len - np.arange(out_len - 256, out_len, dtype=np.float32)) / 256.0)
+            if inst_data.mode == "GRAIN":
+                env *= 0.5 * (1.0 - np.cos(2.0 * np.pi * idx_ar / max(1, out_len - 1)))
+                grain_span = max(64, int(SAMPLE_RATE * (0.02 + inst_data.grain_size * 0.25)))
+                pos_f = start_idx + spray_jitter + ((idx_ar * rate_ratio) % grain_span)
+            elif lfo_depth > 0.01:
+                lfo_val = np.sin(2.0 * np.pi * lfo_freq * (idx_ar / SAMPLE_RATE)) * lfo_depth
+                pos_f = start_idx + spray_jitter + (idx_ar * rate_ratio * (1.0 + lfo_val * 0.06))
+            else:
+                pos_f = start_idx + spray_jitter + (idx_ar * rate_ratio)
+
+            valid = (pos_f >= 0.0) & (pos_f < total_src - 1)
+            idx0 = np.clip(pos_f.astype(np.int32), 0, max(0, total_src - 2))
+            frac = pos_f - idx0
+            samples = np.where(valid, src_arr[idx0] * (1.0 - frac) + src_arr[idx0 + 1] * frac, 0.0)
+            if cutoff < -0.02 or cutoff > 0.02:
+                s_list = samples.tolist()
+                if cutoff < -0.02:
+                    for i in range(out_len):
+                        lp_state += alpha_lp * (s_list[i] * res_boost - lp_state)
+                        s_list[i] = lp_state
+                else:
+                    for i in range(out_len):
+                        inp_s = s_list[i]
+                        hp_state = alpha_hp * (hp_state + inp_s * res_boost - prev_in)
+                        prev_in = inp_s
+                        s_list[i] = hp_state
+                samples = np.asarray(s_list, dtype=np.float32)
+            samples *= (vol * env)
+            if tape_drive > 0.02:
+                samples = np.tanh(samples * drive) / tanh_drive
+            s_int = np.clip(samples * 32767.0, -32767.0, 32767.0).astype(np.int16)
+            return pygame.mixer.Sound(buffer=np.repeat(s_int, 2).tobytes())
+
+        sin_fn = math.sin
+        cos_fn = math.cos
+        tanh_fn = math.tanh
+        pi2 = 2.0 * math.pi
+        is_grain = (inst_data.mode == "GRAIN")
+        grain_span = max(64, int(SAMPLE_RATE * (0.02 + inst_data.grain_size * 0.25))) if is_grain else 1
+        inv_out = 1.0 / max(1, out_len - 1)
 
         for i in range(out_len):
             t = i / SAMPLE_RATE
