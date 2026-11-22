@@ -54,6 +54,19 @@ def quantize_to_scale(midi_note, root_midi, scale_name):
     return best_note
 
 
+def step_in_scale(midi_note, direction, root_midi, scale_name):
+    """Move to the next scale note up (+1) or down (-1)."""
+    new_note = midi_note
+    for _ in range(12):
+        cand = max(24, min(96, new_note + direction))
+        if cand == new_note:
+            break
+        new_note = cand
+        if quantize_to_scale(new_note, root_midi, scale_name) == new_note:
+            break
+    return quantize_to_scale(new_note, root_midi, scale_name)
+
+
 class InstrumentData:
     """Rappresenta uno degli 8 strumenti condivisi (I01 - I08)."""
     def __init__(self, index):
